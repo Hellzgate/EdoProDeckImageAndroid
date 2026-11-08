@@ -5,7 +5,7 @@ using Android.Content;
 using Android.Provider;
 using WindBotDeckImage.Skia;
 
-namespace WindBotDeckImageAndroid
+namespace EdoProDeckImageAndroid
 {
     /// <summary>
     /// SAF(Storage Access Framework) 로 고른 폴더에서 &lt;카드ID&gt;.jpg/png 를 읽는다.

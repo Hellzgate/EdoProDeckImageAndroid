@@ -14,9 +14,9 @@ using Android.Widget;
 using WindBotDeckImage.Skia;
 using SkiaImageStore = WindBotDeckImage.Skia.DeckImageSkiaRenderer.SkiaImageStore;
 
-namespace WindBotDeckImageAndroid
+namespace EdoProDeckImageAndroid
 {
-    [Activity(Label = "덱 이미지", MainLauncher = true,
+    [Activity(Label = "EDOPro 덱 이미지", MainLauncher = true,
         Theme = "@android:style/Theme.Material.Light.DarkActionBar",
         ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode)]
     public sealed class MainActivity : Activity
@@ -43,6 +43,7 @@ namespace WindBotDeckImageAndroid
         private Bitmap _previewBmp;
         private string _deckName = "";
         private bool _busy;
+        private CdbLookup _cdb;
 
         private TextView _status;
         private ImageView _preview;
@@ -65,15 +66,20 @@ namespace WindBotDeckImageAndroid
 
             SetContentView(BuildUi());
             LogMsg("start data=" + AppDataDir() + " cache=" + ImageCacheDir());
+            _cdb = CreateCdb();
+            if (_cdb != null) LogMsg("cdb files=" + _cdb.CdbCount);
             RestoreSettings();
 
             string pathPics = _prefs.GetString("pathPics", null);
-            // 기본 경로 자동 인식 (EDOPro 안드로이드가 쓰는 위치)
-            if (string.IsNullOrEmpty(pathPics) && HasAllFiles() && System.IO.Directory.Exists("/sdcard/EDOPro/pics"))
-                pathPics = "/sdcard/EDOPro/pics";
+            // 기본 경로 자동 인식 (EDOPro 안드로이드가 쓰는 위치) — 찾은 폴더를 **전부** 쓴다
+            if (string.IsNullOrEmpty(pathPics) && HasAllFiles())
+            {
+                List<string> auto = FindImageFolders();
+                if (auto.Count > 0) pathPics = string.Join(";", auto.ToArray());
+            }
             string zipUri = _prefs.GetString("zipUri", null);
             string picsUri = _prefs.GetString("picsUri", null);
-            if (!string.IsNullOrEmpty(pathPics) && HasAllFiles() && System.IO.Directory.Exists(pathPics))
+            if (!string.IsNullOrEmpty(pathPics) && HasAllFiles() && AnyFolderExists(pathPics))
                 LoadPathImages(pathPics);
             else if (!string.IsNullOrEmpty(zipUri)) LoadZipAsync(Android.Net.Uri.Parse(zipUri));
             else if (!string.IsNullOrEmpty(picsUri))
@@ -138,7 +144,7 @@ namespace WindBotDeckImageAndroid
                     ICardImageBytes src;
                     if (!string.IsNullOrEmpty(pathDir))
                     {
-                        src = new FolderImageBytes(pathDir);
+                        src = new MultiFolderImageBytes(SplitPathList(pathDir));
                         srcInfo = "path=" + pathDir;
                     }
                     else if (!string.IsNullOrEmpty(zipFile))
@@ -158,8 +164,14 @@ namespace WindBotDeckImageAndroid
                     foreach (int id in deck.Side) ids.Add(id);
 
                     var swPre = System.Diagnostics.Stopwatch.StartNew();
-                    ICardImageBytes netSrc = _prefs.GetBoolean("netImages", true)
-                        ? HttpImageLogger(new HttpImageBytes(ImageCacheDir())) : null;
+                    ICardImageBytes netSrc = null;
+                    if (_prefs.GetBoolean("netImages", true))
+                    {
+                        var h = new HttpImageBytes(ImageCacheDir());
+                        h.Cdb = _cdb;
+                        netSrc = HttpImageLogger(h);
+                    }
+                    try { if (_cdb != null) _cdb.Prefetch(ids); } catch { }
                     using (var store = new SkiaImageStore(src, netSrc))
                     {
                         store.Preload(new List<int>(ids), null);
@@ -185,8 +197,9 @@ namespace WindBotDeckImageAndroid
                         srcInfo += string.Format(" | preload={0}ms(카드 {1}장, 인터넷 {2}장) render1={3}ms render2={4}ms png={5}+{6}ms", preMs, ids.Count, store.FromFallback, r1, r2, encMs, decMs);
                     }
                     File.WriteAllBytes(outPath, png);
-                    result = string.Format("OK {0} | {1} | placed={2} | missing={3} | png={4}KB | face={5} | {6}",
+                    result = string.Format("OK {0} | {1} | placed={2} | missing={3} | png={4}KB | cdb={5} | face={6} | {7}",
                         st.Width + "x" + st.Height, st.Summary, st.Placed, st.Missing.Count, png.Length / 1024,
+                        _cdb == null ? 0 : _cdb.CdbCount,
                         DeckImageSkiaRenderer.TypefaceInfo(true), srcInfo);
                 }
                 catch (Exception ex)
@@ -223,7 +236,7 @@ namespace WindBotDeckImageAndroid
                 if (ActionBar != null)
                 {
                     ActionBar.SetBackgroundDrawable(new Android.Graphics.Drawables.ColorDrawable(UiPanel));
-                    var title = new Android.Text.SpannableString(ActionBar.Title ?? "덱 이미지");
+                    var title = new Android.Text.SpannableString(ActionBar.Title ?? "EDOPro 덱 이미지");
                     title.SetSpan(new Android.Text.Style.ForegroundColorSpan(UiFg), 0, title.Length(),
                         Android.Text.SpanTypes.ExclusiveExclusive);
                     ActionBar.TitleFormatted = title;
@@ -469,6 +482,88 @@ namespace WindBotDeckImageAndroid
             string d = System.IO.Path.Combine(AppDataDir(), "pics-cache");
             try { System.IO.Directory.CreateDirectory(d); } catch { }
             return d;
+        }
+
+        // ── 이미지 폴더 목록(';' 로 여러 곳) ─────────────────────
+        private static List<string> SplitPathList(string raw)
+        {
+            var list = new List<string>();
+            if (string.IsNullOrEmpty(raw)) return list;
+            foreach (string part in raw.Split(';'))
+            {
+                string t = part.Trim();
+                if (t.Length == 0) continue;
+                if (!list.Contains(t)) list.Add(t);
+            }
+            return list;
+        }
+
+        private static bool AnyFolderExists(string raw)
+        {
+            foreach (string p in SplitPathList(raw))
+                if (System.IO.Directory.Exists(p)) return true;
+            return false;
+        }
+
+        // ── 카드 DB(cdb) — 내장 + 기기 EDOPro ────────────────────
+        /// <summary>앱에 내장한 cards.cdb/cards-en.cdb 를 files/cdb 로 1회 풀고, 기기 EDOPro cdb 도 모은다.</summary>
+        private CdbLookup CreateCdb()
+        {
+            var files = new List<string>();
+            try { files.AddRange(ExtractBundledCdb()); } catch { }
+            try { if (HasAllFiles()) files.AddRange(CdbLookup.FindDeviceCdb()); } catch { }
+            try
+            {
+                string cache = System.IO.Path.Combine(AppDataDir(), "cdb-cache.json");
+                return CdbLookup.Create(files, cache);
+            }
+            catch { return null; }
+        }
+
+        private List<string> ExtractBundledCdb()
+        {
+            var list = new List<string>();
+            string dir = System.IO.Path.Combine(AppDataDir(), "cdb");
+            System.IO.Directory.CreateDirectory(dir);
+            string stampPath = System.IO.Path.Combine(dir, ".stamp");
+            string ver = "";
+            try
+            {
+                var pi = PackageManager.GetPackageInfo(PackageName, 0);
+                ver = pi.VersionName + "/" + pi.VersionCode;
+            }
+            catch { ver = "1"; }
+
+            bool fresh = false;
+            try { fresh = System.IO.File.Exists(stampPath) && System.IO.File.ReadAllText(stampPath).Trim() == ver; } catch { }
+
+            string[] names = new string[0];
+            try { names = Assets.List("carddata") ?? new string[0]; } catch { }
+            foreach (string name in names)
+            {
+                if (!name.EndsWith(".cdb", StringComparison.OrdinalIgnoreCase)) continue;
+                string dst = System.IO.Path.Combine(dir, name);
+                if (!fresh)
+                {
+                    try
+                    {
+                        using (Stream s = Assets.Open("carddata/" + name))
+                        using (var ms = new MemoryStream())
+                        {
+                            s.CopyTo(ms);
+                            byte[] bytes = ms.ToArray();
+                            if (bytes.Length > 1024) System.IO.File.WriteAllBytes(dst, bytes);
+                        }
+                    }
+                    catch (Exception ex) { LogMsg("asset cdb FAIL " + name + " : " + ex.Message); }
+                }
+                if (System.IO.File.Exists(dst)) list.Add(dst);
+            }
+            if (!fresh && list.Count > 0)
+            {
+                try { System.IO.File.WriteAllText(stampPath, ver); } catch { }
+            }
+            return list;
         }
 
         // 간단한 파일 로그(오류 위주). 1MB 넘으면 app.log.old 로 한 번 밀어 둔다.
@@ -800,6 +895,12 @@ namespace WindBotDeckImageAndroid
                 }
             }
             int iManual = labels.Count; labels.Add("폴더 경로 직접 입력...");
+            int iAll = -1;
+            if (paths.Count >= 2)
+            {
+                iAll = labels.Count;
+                labels.Add(string.Format("찾은 폴더 {0}곳 모두 사용", paths.Count));
+            }
             int iPerm = labels.Count; labels.Add(perm ? "모든 파일 액세스: 허용됨" : "모든 파일 액세스 허용 (권장)");
             int iZip = labels.Count; labels.Add("이미지 ZIP 으로 읽기");
 
@@ -839,6 +940,7 @@ namespace WindBotDeckImageAndroid
                     int idx = e.Which;
                     if (idx < paths.Count) { LoadPathImages(paths[idx]); return; }
                     if (idx == iManual) { PromptPathMode(); return; }
+                    if (idx == iAll) { LoadPathImages(paths); return; }
                     if (idx == iPerm) { _pendingPath = "/sdcard/EDOPro/pics"; AskAllFiles(); return; }
                     if (idx == iZip) { PickZip(); return; }
                 })
@@ -850,7 +952,7 @@ namespace WindBotDeckImageAndroid
             var layout = new LinearLayout(this) { Orientation = Orientation.Vertical };
             layout.SetPadding(Dp(18), Dp(8), Dp(18), Dp(4));
 
-            layout.AddView(new TextView(this) { Text = "카드 이미지 폴더의 실제 경로" });
+            layout.AddView(new TextView(this) { Text = "카드 이미지 폴더의 실제 경로 (여러 폴더는 ; 로 구분)" });
             var input = new EditText(this);
             input.Text = _prefs.GetString("pathPics", "/sdcard/EDOPro/pics");
             layout.AddView(input);
@@ -881,22 +983,39 @@ namespace WindBotDeckImageAndroid
 
         private void LoadPathImages(string path)
         {
+            LoadPathImages(SplitPathList(path));
+        }
+
+        private void LoadPathImages(List<string> folders)
+        {
             try
             {
-                if (string.IsNullOrEmpty(path) || !System.IO.Directory.Exists(path))
+                var real = new List<string>();
+                foreach (string f in folders)
+                    if (System.IO.Directory.Exists(f)) real.Add(f);
+
+                if (real.Count == 0)
                 {
-                    Status("폴더가 없습니다: " + path);
-                    Toast.MakeText(this, "폴더가 없습니다: " + path, ToastLength.Long).Show();
+                    string show = folders.Count > 0 ? string.Join(";", folders.ToArray()) : "(빈 경로)";
+                    Status("폴더가 없습니다: " + show);
+                    Toast.MakeText(this, "폴더가 없습니다: " + show, ToastLength.Long).Show();
                     return;
                 }
                 int jpg = 0, png = 0;
-                try { jpg = System.IO.Directory.GetFiles(path, "*.jpg").Length; } catch { }
-                try { png = System.IO.Directory.GetFiles(path, "*.png").Length; } catch { }
-                _prefs.Edit().PutString("pathPics", path).Remove("picsUri").Remove("zipUri").Apply();
-                Android.Util.Log.Info("AI-EDITOR", "path mode " + path + " jpg=" + jpg + " png=" + png);
+                foreach (string f in real)
+                {
+                    try { jpg += System.IO.Directory.GetFiles(f, "*.jpg").Length; } catch { }
+                    try { png += System.IO.Directory.GetFiles(f, "*.png").Length; } catch { }
+                }
+                string raw = string.Join(";", real.ToArray());
+                _prefs.Edit().PutString("pathPics", raw).Remove("picsUri").Remove("zipUri").Apply();
+                Android.Util.Log.Info("AI-EDITOR", "path mode " + raw + " folders=" + real.Count + " jpg=" + jpg + " png=" + png);
                 if (jpg + png == 0)
                     Toast.MakeText(this, "그 폴더에 이미지가 없습니다.", ToastLength.Long).Show();
-                SetImageSource(new FolderImageBytes(path), string.Format("이미지: {0} (경로 모드) · jpg {1} / png {2}", path, jpg, png));
+                string label = real.Count == 1
+                    ? string.Format("이미지: {0} (경로 모드) · jpg {1} / png {2}", real[0], jpg, png)
+                    : string.Format("이미지: {0} (+{1}곳) · jpg {2} / png {3}", real[0], real.Count - 1, jpg, png);
+                SetImageSource(new MultiFolderImageBytes(real), label);
             }
             catch (Exception ex)
             {
@@ -914,7 +1033,7 @@ namespace WindBotDeckImageAndroid
                 string path = _pendingPath;
                 _pendingPath = null;
                 var found = FindImageFolders();
-                LoadPathImages(found.Count > 0 ? found[0] : path);
+                LoadPathImages(found.Count > 0 ? found : SplitPathList(path));
             }
         }
 
@@ -962,7 +1081,13 @@ namespace WindBotDeckImageAndroid
             ICardImageBytes fallback = null;
             if (_prefs.GetBoolean("netImages", true))
             {
-                try { fallback = HttpImageLogger(new HttpImageBytes(ImageCacheDir())); } catch { }
+                try
+                {
+                    var h = new HttpImageBytes(ImageCacheDir());
+                    h.Cdb = _cdb;                       // alias(원본 ID) · 이름 폴백
+                    fallback = HttpImageLogger(h);
+                }
+                catch { }
             }
             _store = new SkiaImageStore(src, fallback);
             _images = src;
@@ -998,6 +1123,9 @@ namespace WindBotDeckImageAndroid
             {
                 try
                 {
+                    // cdb(원본 ID·이름) 정보를 먼저 채운다 — 없으면 아래 프리로드에서 폴백이 안 된다
+                    try { if (_cdb != null) _cdb.Prefetch(list); } catch { }
+
                     int loaded = store.Preload(list, delegate (int done, int total)
                     {
                         RunOnUiThread(delegate

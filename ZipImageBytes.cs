@@ -4,7 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using WindBotDeckImage.Skia;
 
-namespace WindBotDeckImageAndroid
+namespace EdoProDeckImageAndroid
 {
     /// <summary>
     /// 카드 이미지 **ZIP** 에서 &lt;카드ID&gt;.jpg/png 를 읽는다.
