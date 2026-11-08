@@ -10,15 +10,15 @@
     <AssemblyName>EdoProDeckImageAndroid</AssemblyName>
     <ApplicationId>com.hellzgate.windbotdeckimage</ApplicationId>
     <ApplicationTitle>EDOPro 덱 이미지</ApplicationTitle>
-    <ApplicationVersion>9</ApplicationVersion>
-    <ApplicationDisplayVersion>1.8</ApplicationDisplayVersion>
+    <ApplicationVersion>10</ApplicationVersion>
+    <ApplicationDisplayVersion>1.8.1</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifiers>android-arm64;android-arm</RuntimeIdentifiers>
     <PublishTrimmed>false</PublishTrimmed>
     <RunAOTCompilation>false</RunAOTCompilation>
     <EnableLLVM>false</EnableLLVM>
-    <Version>1.8</Version>
-    <FileVersion>1.8.0.0</FileVersion>
+    <Version>1.8.1</Version>
+    <FileVersion>1.8.1.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

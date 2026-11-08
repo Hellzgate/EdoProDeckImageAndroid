@@ -7,6 +7,11 @@
 > 클론했다면 형제 폴더에 `_shared` 를 두세요: `<작업폴더>\EdoProDeckImageAndroid` + `<작업폴더>\_shared\DeckImageSkia\DeckImageSkiaRenderer.cs`
 > (배포 백업 ZIP 에는 `_shared/` 가 들어 있어 그대로 풀면 바로 빌드됩니다.)
 
+## v1.8.1 (2026-11-08)
+
+- 긴 제목이 이미지 오른쪽에서 잘리던 문제 수정 — 폭 초과 시 글자 자동 축소(최소 11px) 후 `…`
+- 하단 정보(푸터)도 같은 처리
+
 ## v1.8 (2026-11-08)
 
 - 이름 변경: **EdoProDeckImageAndroid** (앱 표시명 "EDOPro 덱 이미지", 패키지는 그대로)

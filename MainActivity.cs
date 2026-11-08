@@ -138,6 +138,11 @@ namespace EdoProDeckImageAndroid
                         Theme = "dark",
                         ShowCounts = false
                     };
+                    // 검증용: adb --es testTitle "…" 로 제목/푸터를 바꿔 볼 수 있다(긴 제목 잘림 확인)
+                    string tTitle = Intent != null ? Intent.GetStringExtra("testTitle") : null;
+                    if (!string.IsNullOrEmpty(tTitle)) opt.Title = tTitle;
+                    string tNote = Intent != null ? Intent.GetStringExtra("testNote") : null;
+                    if (!string.IsNullOrEmpty(tNote)) opt.FooterNote = tNote;
                     SkiaRenderStats st;
                     byte[] png;
                     string srcInfo;
