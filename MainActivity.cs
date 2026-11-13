@@ -303,6 +303,8 @@ namespace EdoProDeckImageAndroid
             _cols.Adapter = colsAdapter;
             _cols.SetSelection(2);
             _cols.LayoutParameters = new LinearLayout.LayoutParams(Dp(80), -2);
+            _cols.Background = BoxDrawable();
+            _cols.SetPadding(Dp(8), 0, Dp(4), 0);
             _cols.ItemSelected += delegate { RequestRenderSoon(); };
             optRow.AddView(_cols);
 
@@ -315,12 +317,14 @@ namespace EdoProDeckImageAndroid
             checksRow.SetPadding(Dp(10), 0, Dp(8), Dp(2));
             checksRow.SetGravity(GravityFlags.CenterVertical);
             _counts = new CheckBox(this) { Text = "x2/x3 배지" };
+            _counts.ButtonTintList = Android.Content.Res.ColorStateList.ValueOf(UiAccent);
             _counts.TextSize = 12f;
             _counts.SetTextColor(UiFg);
             _counts.CheckedChange += delegate { RequestRenderSoon(); };
             checksRow.AddView(_counts);
 
             _side = new CheckBox(this) { Text = "사이드", Checked = true };
+            _side.ButtonTintList = Android.Content.Res.ColorStateList.ValueOf(UiAccent);
             _side.TextSize = 12f;
             _side.SetTextColor(UiFg);
             _side.CheckedChange += delegate { RequestRenderSoon(); };
@@ -333,6 +337,8 @@ namespace EdoProDeckImageAndroid
             _theme.Adapter = themeAdapter;
             _theme.SetSelection(0);
             _theme.LayoutParameters = new LinearLayout.LayoutParams(Dp(92), -2);
+            _theme.Background = BoxDrawable();
+            _theme.SetPadding(Dp(8), 0, Dp(4), 0);
             _theme.ItemSelected += delegate { RequestRenderSoon(); };
             checksRow.AddView(_theme);
 
@@ -380,6 +386,16 @@ namespace EdoProDeckImageAndroid
         private static LinearLayout.LayoutParams Row(int w, int h)
         {
             return new LinearLayout.LayoutParams(w, h);
+        }
+
+        /// <summary>입력칸 모양(둥근 사각형 + 테두리) — 스피너가 기본 밑줄로 보이던 것 교체.</summary>
+        private Android.Graphics.Drawables.GradientDrawable BoxDrawable()
+        {
+            var g = new Android.Graphics.Drawables.GradientDrawable();
+            g.SetColor(UiBox);
+            g.SetCornerRadius(Dp(6));
+            g.SetStroke(Dp(1), Color.ParseColor("#4A4D55"));
+            return g;
         }
 
         private Button MakeButton(string text, bool primary = false)
